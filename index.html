@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <!-- BASIC -->
-<title>Spinning Fractal Lab</title>
+<title>Fractal Lab</title>
 <meta name="description" content="Interactive spinning fractal generator. Click mutate to create new forms.">
 
 <!-- OPEN GRAPH (Discord, Facebook, etc.) -->
@@ -20,189 +20,214 @@
 <meta name="twitter:title" content="Spinning Fractal Lab">
 <meta name="twitter:description" content="Procedural fractal generator with real-time rotation.">
 <meta name="twitter:image" content="002.png">
-<link id="favicon" rel="icon" type="image/png">
+<link id="favicon" rel="icon">
 <style>
-  body {
-    margin: 0;
-    overflow: hidden;
-    background: #05070a;
-  }
-  canvas { display: block; }
-  button {
-    position: fixed;
-    top: 20px;
-    left: 20px;
-    z-index: 10;
-    padding: 10px 15px;
-    background: #111;
-    color: #0ff;
-    border: 1px solid #0ff;
-    cursor: pointer;
-  }
+body { margin:0; overflow:hidden; background:#05070a; }
+canvas { display:block; }
+.ui {
+  position:fixed; top:20px; left:20px; display:flex; gap:10px;
+}
+button {
+  padding:10px; background:#111; color:#0ff;
+  border:1px solid #0ff; cursor:pointer;
+}
 </style>
 </head>
 <body>
 
-<button id="mutateBtn">Mutate</button>
-<canvas id="canvas1"></canvas>
+<div class="ui">
+  <button id="mutateBtn">Mutate</button>
+  <button id="saveBtn">Save</button>
+  <button id="copyBtn">Copy Link</button>
+</div>
+
+<canvas id="canvas"></canvas>
 
 <script>
-const canvas = document.getElementById("canvas1");
-const ctx = canvas.getContext("2d");
-const mutateBtn = document.getElementById("mutateBtn");
+// ---------- RNG ----------
+function mulberry32(a){
+  return function(){
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t>>>15, t|1);
+    t ^= t + Math.imul(t ^ t>>>7, t|61);
+    return ((t ^ t>>>14)>>>0)/4294967296;
+  }
+}
 
-// OFFSCREEN BUFFER
+// ---------- URL seed ----------
+function getSeed(){
+  return new URL(location.href).searchParams.get("seed");
+}
+function setSeed(seed){
+  const url = new URL(location.href);
+  url.searchParams.set("seed", seed);
+  history.replaceState({}, "", url);
+}
+
+// ---------- canvas ----------
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
 const buffer = document.createElement("canvas");
 const bctx = buffer.getContext("2d");
 
-  function updateFavicon() {
-  // create small square icon
-  const size = 64;
-  const iconCanvas = document.createElement("canvas");
-  const ictx = iconCanvas.getContext("2d");
-
-  iconCanvas.width = size;
-  iconCanvas.height = size;
-
-  // draw scaled fractal into icon
-  ictx.fillStyle = "#05070a";
-  ictx.fillRect(0, 0, size, size);
-
-  const scale = Math.min(size / buffer.width, size / buffer.height);
-
-  ictx.save();
-  ictx.translate(size / 2, size / 2);
-  ictx.scale(scale * 0.9, scale * 0.9); // slight padding
-  ictx.drawImage(buffer, -buffer.width / 2, -buffer.height / 2);
-  ictx.restore();
-
-  const url = iconCanvas.toDataURL("image/png");
-  document.getElementById("favicon").href = url;
-}
-
+// ---------- fractal ----------
 class FractLab {
-  constructor() {
-    this.lineWidth = Math.floor(Math.random() * 11) + 5;
-    this.hue = Math.random() * 360;
-    this.sides = Math.floor(Math.random() * 4) + 2;
+  constructor(rand){
+    this.rand = rand;
+    this.lineWidth = Math.floor(rand()*8)+4;
+    this.hue = rand()*360;
+    this.sides = Math.floor(rand()*5)+2;
     this.maxLevel = 6;
-    this.spread = Math.random() * 0.5 + 0.4;
+    this.spread = rand()*0.5+0.4;
 
-    this.tau = Math.PI * 2;
-
-    this.scale = Math.random() * 0.1 + 0.7;
+    this.scale = rand()*0.15+0.65;
     this.branches = 4;
     this.branchSize = 150;
 
-    const lastIndex = this.branches - 1;
-    const spreadFactor = this.spread * 5;
-    this.chaos =
-      (lastIndex - (this.branches - spreadFactor + Math.random() * 0.75));
-    this.symmetry = lastIndex - (this.branches - spreadFactor) * 0.5;
+    const last = this.branches-1;
+    const sf = this.spread*5;
+
+    this.chaos = last-(this.branches-sf+rand()*0.75);
+    this.symmetry = last-(this.branches-sf)*0.5;
+
+    this.tau = Math.PI*2;
   }
 
-  renderToBuffer(ctx) {
-    ctx.clearRect(0, 0, buffer.width, buffer.height);
-
-    ctx.lineWidth = this.lineWidth;
-    ctx.lineCap = "round";
+  render(ctx){
+    ctx.clearRect(0,0,buffer.width,buffer.height);
 
     ctx.save();
-    ctx.translate(buffer.width / 2, buffer.height / 2);
+    ctx.setTransform(1,0,0,1,0,0); // IMPORTANT RESET
+    ctx.lineCap="round";
+    ctx.lineWidth=this.lineWidth;
 
-    for (let i = 0; i < this.sides; i++) {
-      this.drawBranch(ctx, 0);
-      ctx.rotate(this.tau / this.sides);
+    ctx.translate(buffer.width/2, buffer.height/2);
+
+    for(let i=0;i<this.sides;i++){
+      this.branch(ctx,0);
+      ctx.rotate(this.tau/this.sides);
     }
 
     ctx.restore();
   }
 
-  drawBranch(ctx, level) {
-    if (level > this.maxLevel) return;
+  branch(ctx, level){
+    if(level>this.maxLevel) return;
 
-    ctx.strokeStyle = `hsl(${this.hue}, 70%, ${20 + level * 9}%)`;
+    ctx.strokeStyle = `hsl(${this.hue},70%,${20+level*10}%)`;
 
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(this.branchSize, 0);
+    ctx.moveTo(0,0);
+    ctx.lineTo(this.branchSize,0);
     ctx.stroke();
 
-    for (let i = 0; i < this.branches; i++) {
-      const pos = this.branchSize - (this.branchSize / this.branches) * i;
+    for(let i=0;i<this.branches;i++){
+      const pos = this.branchSize-(this.branchSize/this.branches)*i;
 
       ctx.save();
-      ctx.translate(pos, 0);
-      ctx.scale(this.scale, this.scale);
+      ctx.translate(pos,0);
+      ctx.scale(this.scale,this.scale);
       ctx.rotate(
-        (this.spread * this.symmetry * i) / this.branches -
-        this.spread * this.chaos
+        (this.spread*this.symmetry*i)/this.branches -
+        this.spread*this.chaos
       );
-
-      this.drawBranch(ctx, level + 1);
+      this.branch(ctx, level+1);
       ctx.restore();
     }
   }
 }
 
-let fractal = new FractLab();
+// ---------- state ----------
+let seed = getSeed() || Math.floor(Math.random()*1e9).toString();
+setSeed(seed);
+
+let rand = mulberry32(Number(seed));
+let fractal = new FractLab(rand);
 let rotation = 0;
 
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+// ---------- render loop ----------
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  ctx.shadowColor = "rgba(0,0,0,0.5)";
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetX = 3;
-  ctx.shadowOffsetY = 3;
+  ctx.shadowColor="rgba(0,0,0,0.5)";
+  ctx.shadowBlur=12;
 
   ctx.save();
-  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.translate(canvas.width/2,canvas.height/2);
   ctx.rotate(rotation);
 
-  ctx.drawImage(buffer, -buffer.width / 2, -buffer.height / 2);
+  ctx.drawImage(buffer, -buffer.width/2, -buffer.height/2);
 
   ctx.restore();
 }
 
-function animate() {
-  rotation += 0.01;
+function animate(){
+  rotation+=0.01;
   draw();
   requestAnimationFrame(animate);
 }
 
-// CREATE SHAREABLE PREVIEW IMAGE
-function updateMeta() {
-  const dataURL = buffer.toDataURL("image/png");
-
-  document.querySelector('meta[property="og:image"]').content = dataURL;
-  document.querySelector('meta[name="twitter:image"]').content = dataURL;
-
-  // optional: change title per fractal
-  document.title = `Fractal ${Math.floor(fractal.hue)}°`;
-}
-
-mutateBtn.addEventListener("click", () => {
-  fractal = new FractLab();
-  fractal.renderToBuffer(bctx);
-  updateMeta();
-  updateFavicon(); // <-- add this
-});
-
-function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+// ---------- resize ----------
+function resize(){
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
 
   const diag = Math.sqrt(canvas.width**2 + canvas.height**2);
+
   buffer.width = diag;
   buffer.height = diag;
 
-  fractal.renderToBuffer(bctx);
-  updateMeta();
+  fractal.render(bctx);
+  updateFavicon();
 }
 
 window.addEventListener("resize", resize);
 
+// ---------- favicon ----------
+function updateFavicon(){
+  const icon = document.createElement("canvas");
+  const ictx = icon.getContext("2d");
+
+  icon.width = 64;
+  icon.height = 64;
+
+  ictx.fillStyle="#05070a";
+  ictx.fillRect(0,0,64,64);
+
+  const scale = 64 / buffer.width;
+
+  ictx.save();
+  ictx.translate(32,32);
+  ictx.scale(scale*1.8, scale*1.8);
+  ictx.drawImage(buffer, -buffer.width/2, -buffer.height/2);
+  ictx.restore();
+
+  document.getElementById("favicon").href = icon.toDataURL();
+}
+
+// ---------- controls ----------
+mutateBtn.onclick = ()=>{
+  seed = Math.floor(Math.random()*1e9).toString();
+  setSeed(seed);
+
+  rand = mulberry32(Number(seed));
+  fractal = new FractLab(rand);
+
+  fractal.render(bctx);
+  updateFavicon();
+};
+
+saveBtn.onclick = ()=>{
+  const a = document.createElement("a");
+  a.href = buffer.toDataURL("image/png");
+  a.download = `fract-${seed}.png`;
+  a.click();
+};
+
+copyBtn.onclick = ()=>navigator.clipboard.writeText(location.href);
+
+// ---------- init ----------
 resize();
 animate();
 </script>
