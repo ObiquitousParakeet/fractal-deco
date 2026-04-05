@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fractal (No Clipping)</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #05070a;
+  }
+  canvas { display: block; }
+  button {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 10;
+    padding: 10px 15px;
+    background: #111;
+    color: #0ff;
+    border: 1px solid #0ff;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<button id="mutateBtn">Mutate</button>
+<canvas id="canvas1"></canvas>
+
+<script>
+const canvas = document.getElementById("canvas1");
+const ctx = canvas.getContext("2d");
+const mutateBtn = document.getElementById("mutateBtn");
+
+// OFFSCREEN BUFFER
+const buffer = document.createElement("canvas");
+const bctx = buffer.getContext("2d");
+
+class FractLab {
+  constructor() {
+    this.lineWidth = Math.floor(Math.random() * 11) + 5;
+    this.hue = Math.random() * 360;
+    this.sides = Math.floor(Math.random() * 4) + 2;
+    this.maxLevel = 6;
+    this.spread = Math.random() * 0.5 + 0.4;
+
+    this.tau = Math.PI * 2;
+
+    this.scale = Math.random() * 0.1 + 0.7;
+    this.branches = 4;
+    this.branchSize = 150;
+
+    const lastIndex = this.branches - 1;
+    const spreadFactor = this.spread * 5;
+    this.chaos =
+      (lastIndex - (this.branches - spreadFactor + Math.random() * 0.75));
+    this.symmetry = lastIndex - (this.branches - spreadFactor) * 0.5;
+  }
+
+  renderToBuffer(ctx) {
+    ctx.clearRect(0, 0, buffer.width, buffer.height);
+
+    ctx.lineWidth = this.lineWidth;
+    ctx.lineCap = "round";
+
+    ctx.save();
+    ctx.translate(buffer.width / 2, buffer.height / 2);
+
+    for (let i = 0; i < this.sides; i++) {
+      this.drawBranch(ctx, 0);
+      ctx.rotate(this.tau / this.sides);
+    }
+
+    ctx.restore();
+  }
+
+  drawBranch(ctx, level) {
+    if (level > this.maxLevel) return;
+
+    ctx.strokeStyle = `hsl(${this.hue}, 70%, ${20 + level * 9}%)`;
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(this.branchSize, 0);
+    ctx.stroke();
+
+    for (let i = 0; i < this.branches; i++) {
+      const pos = this.branchSize - (this.branchSize / this.branches) * i;
+
+      ctx.save();
+      ctx.translate(pos, 0);
+      ctx.scale(this.scale, this.scale);
+      ctx.rotate(
+        (this.spread * this.symmetry * i) / this.branches -
+        this.spread * this.chaos
+      );
+
+      this.drawBranch(ctx, level + 1);
+      ctx.restore();
+    }
+  }
+}
+
+let fractal = new FractLab();
+let rotation = 0;
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // shadows ONLY here (so they stay dynamic and not baked)
+  ctx.shadowColor = "rgba(0,0,0,0.5)";
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetX = 3;
+  ctx.shadowOffsetY = 3;
+
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(rotation);
+
+  ctx.drawImage(
+    buffer,
+    -buffer.width / 2,
+    -buffer.height / 2
+  );
+
+  ctx.restore();
+}
+
+function animate() {
+  rotation += 0.01;
+  draw();
+  requestAnimationFrame(animate);
+}
+
+mutateBtn.addEventListener("click", () => {
+  fractal = new FractLab();
+  fractal.renderToBuffer(bctx);
+});
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+
+  // KEY FIX: square buffer sized to diagonal
+  const diag = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
+  buffer.width = diag;
+  buffer.height = diag;
+
+  fractal.renderToBuffer(bctx);
+}
+
+window.addEventListener("resize", resize);
+
+resize();
+animate();
+</script>
+
+</body>
+</html>
