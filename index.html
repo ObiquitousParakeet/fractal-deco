@@ -3,7 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fractal (No Clipping)</title>
+
+<!-- BASIC -->
+<title>Spinning Fractal Lab</title>
+<meta name="description" content="Interactive spinning fractal generator. Click mutate to create new forms.">
+
+<!-- OPEN GRAPH (Discord, Facebook, etc.) -->
+<meta property="og:title" content="Spinning Fractal Lab">
+<meta property="og:description" content="Procedural fractal generator with real-time rotation.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="">
+<meta property="og:image" content="">
+
+<!-- TWITTER -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Spinning Fractal Lab">
+<meta name="twitter:description" content="Procedural fractal generator with real-time rotation.">
+<meta name="twitter:image" content="">
+
 <style>
   body {
     margin: 0;
@@ -109,7 +126,6 @@ let rotation = 0;
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // shadows ONLY here (so they stay dynamic and not baked)
   ctx.shadowColor = "rgba(0,0,0,0.5)";
   ctx.shadowBlur = 10;
   ctx.shadowOffsetX = 3;
@@ -119,11 +135,7 @@ function draw() {
   ctx.translate(canvas.width / 2, canvas.height / 2);
   ctx.rotate(rotation);
 
-  ctx.drawImage(
-    buffer,
-    -buffer.width / 2,
-    -buffer.height / 2
-  );
+  ctx.drawImage(buffer, -buffer.width / 2, -buffer.height / 2);
 
   ctx.restore();
 }
@@ -134,21 +146,33 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
+// CREATE SHAREABLE PREVIEW IMAGE
+function updateMeta() {
+  const dataURL = buffer.toDataURL("image/png");
+
+  document.querySelector('meta[property="og:image"]').content = dataURL;
+  document.querySelector('meta[name="twitter:image"]').content = dataURL;
+
+  // optional: change title per fractal
+  document.title = `Fractal ${Math.floor(fractal.hue)}°`;
+}
+
 mutateBtn.addEventListener("click", () => {
   fractal = new FractLab();
   fractal.renderToBuffer(bctx);
+  updateMeta();
 });
 
 function resize() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 
-  // KEY FIX: square buffer sized to diagonal
-  const diag = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
+  const diag = Math.sqrt(canvas.width**2 + canvas.height**2);
   buffer.width = diag;
   buffer.height = diag;
 
   fractal.renderToBuffer(bctx);
+  updateMeta();
 }
 
 window.addEventListener("resize", resize);
